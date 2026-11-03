@@ -1,0 +1,202 @@
+
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --color-ink: #14201c;
+  --color-muted: #4b5754;
+  --color-canvas: #f6f7f5;
+  --color-side: #10231f;
+  --color-brand: #0f766e;
+  --color-line: #e4e8e5;
+  --color-danger: #b42318;
+  --color-admin: #4f46e5;
+  --color-admin-side: #1b1f33;
+  --color-admin-canvas: #f5f6fa;
+}
+
+:root {
+  --accent: #0f766e;
+  --canvas: #f6f7f5;
+}
+
+.theme-admin {
+  --accent: #4f46e5;
+  --canvas: #f5f6fa;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--canvas);
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl bg-white p-5;
+  }
+
+  .input {
+    @apply h-11 w-full rounded-lg border border-[#cbd3cf] bg-white px-3 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30;
+  }
+
+  .label {
+    @apply mb-1.5 block text-[13px] text-muted;
+  }
+
+  .field-error {
+    @apply mt-1.5 text-[13px] text-danger;
+  }
+
+  .btn {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#cbd3cf] bg-white px-4 text-sm font-semibold text-ink transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-primary {
+    @apply border-transparent bg-[var(--accent)] text-white hover:bg-[var(--accent)] hover:brightness-95;
+  }
+
+  .btn-danger {
+    @apply border-[#f5b5ae] bg-[#fdecea] text-danger hover:bg-[#fbdcd8];
+  }
+
+  .btn-ok {
+    @apply border-[#86d9a8] bg-[#e7f8ee] text-[#166534] hover:bg-[#d8f3e2];
+  }
+
+  .icon-btn {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#cbd3cf] bg-white text-ink transition hover:bg-gray-50;
+  }
+
+  .banner {
+    @apply rounded-lg border px-3.5 py-3 text-sm leading-relaxed;
+  }
+
+  .banner-error {
+    @apply border-danger bg-[#fef3f2] text-[#912018];
+  }
+
+  .banner-warn {
+    @apply border-[#b54708] bg-[#fffaeb] text-[#7a2e0e];
+  }
+
+  .banner-ok {
+    @apply border-[#067647] bg-[#ecfdf3] text-[#054f31];
+  }
+
+  .th {
+    @apply px-2 py-2 text-left text-[13px] font-medium text-muted;
+  }
+
+  .td {
+    @apply border-t border-line px-2 py-3 text-sm;
+  }
+}
+
+/* =========================================
+   FORM VALIDATION
+   ========================================= */
+
+.input.input-bad,
+.input.input-bad:focus {
+  border: 2px solid var(--color-danger);
+  padding-left: 11px;
+  padding-right: 11px;
+  outline: none;
+  box-shadow: none;
+}
+
+.input.input-bad:focus {
+  box-shadow: 0 0 0 3px rgb(180 35 24 / 0.2);
+}
+
+/* =========================================
+   DARK MODE
+   ========================================= */
+
+html.theme-dark {
+  --color-ink: #e5e7eb;
+  --color-muted: #a1a1aa;
+  --color-canvas: #111827;
+  --color-line: #374151;
+  --canvas: #111827;
+}
+
+html.theme-dark body {
+  color: #e5e7eb;
+  background-color: #111827;
+}
+
+/* Cards */
+html.theme-dark .card {
+  background-color: #1f2937;
+  color: #e5e7eb;
+}
+
+/* Text */
+html.theme-dark .text-ink {
+  color: #e5e7eb;
+}
+
+html.theme-dark .text-muted {
+  color: #a1a1aa;
+}
+
+/* Inputs */
+html.theme-dark .input {
+  background-color: #111827;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+html.theme-dark .input::placeholder {
+  color: #9ca3af;
+}
+
+/* Read-only fields */
+html.theme-dark .input:read-only {
+  background-color: #374151;
+  color: #d1d5db;
+}
+
+/* Buttons */
+html.theme-dark .btn,
+html.theme-dark .icon-btn {
+  background-color: #374151;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+html.theme-dark .btn:hover,
+html.theme-dark .icon-btn:hover {
+  background-color: #4b5563;
+}
+
+html.theme-dark .btn-primary {
+  background-color: var(--accent);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+/* Borders */
+html.theme-dark .border-line {
+  border-color: #374151;
+}
+
+/* Tables */
+html.theme-dark .th,
+html.theme-dark .td {
+  border-color: #374151;
+}
+
+/* Common gray backgrounds */
+html.theme-dark .bg-gray-50,
+html.theme-dark .bg-gray-100 {
+  background-color: #374151;
+}
+
+/* Admin theme */
+html.theme-admin.theme-dark {
+  --accent: #818cf8;
+}
