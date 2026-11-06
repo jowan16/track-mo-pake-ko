@@ -1,10 +1,9 @@
+
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { PageLoader } from './ui'
 
-// Keep logged-in people off the log in and sign up pages (for example when they press Back).
-// It decides once, when the page opens, so it does not interfere with a log in in progress.
 export function RequireGuest() {
   const { session, profile, loading } = useAuth()
   const checked = useRef(false)
@@ -12,17 +11,21 @@ export function RequireGuest() {
 
   useEffect(() => {
     if (loading || checked.current) return
+
     checked.current = true
+
     if (!session || profile?.status !== 'active') return
+
     setTarget(profile.role === 'admin' ? '/admin' : '/app')
   }, [loading, session, profile])
 
   if (loading) return <PageLoader />
+
   if (target) return <Navigate to={target} replace />
+
   return <Outlet />
 }
 
-// Protect user and admin dashboard routes.
 export function RequireRole({
   role,
 }: {
@@ -30,12 +33,12 @@ export function RequireRole({
 }) {
   const { session, profile, loading, signOut } = useAuth()
 
-  // Wait for authentication initialization.
+  // Show the animated transition while authentication is being verified.
   if (loading) {
     return <PageLoader />
   }
 
-  // Redirect unauthenticated users to the appropriate login page.
+  // Redirect unauthenticated users.
   if (!session) {
     return (
       <Navigate
@@ -109,6 +112,5 @@ export function RequireRole({
     )
   }
 
-  // Allow authenticated users with the correct role.
   return <Outlet />
 }

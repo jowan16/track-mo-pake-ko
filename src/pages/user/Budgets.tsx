@@ -47,6 +47,29 @@ export default function Budgets() {
     setError({})
   }
 
+  // Allow only digits and one decimal point, with up to 2 decimal places.
+  const handleAmountChange = (value: string) => {
+    let cleaned = value.replace(/[^\d.]/g, '')
+
+    const parts = cleaned.split('.')
+
+    if (parts.length > 2) {
+      cleaned = `${parts[0]}.${parts.slice(1).join('')}`
+    }
+
+    const [whole, decimal] = cleaned.split('.')
+
+    if (decimal !== undefined) {
+      cleaned = `${whole}.${decimal.slice(0, 2)}`
+    }
+
+    setAmount(cleaned)
+
+    if (error.amount) {
+      setError((prev) => ({ ...prev, amount: undefined }))
+    }
+  }
+
   const save = useMutation({
     mutationFn: async (values: {
       id: string | null
@@ -85,7 +108,7 @@ export default function Budgets() {
     onError: (e: { code?: string }) => {
       if (e?.code === '23505') {
         setError({
-          cat: `A budget for ${catById.get(Number(catId))?.name} already exists this month. If it is archived, restore it or permanently delete it first.`,
+          cat: `An active budget for ${catById.get(Number(catId))?.name} already exists this month.`,
         })
       } else {
         toast.error(errMsg(e))
@@ -141,7 +164,8 @@ export default function Budgets() {
     }
 
     if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
-      next.amount = 'Enter an amount greater than 0.'
+      next.amount =
+        'Enter a valid amount greater than 0 (maximum 2 decimal places).'
     }
 
     setError(next)
@@ -157,9 +181,11 @@ export default function Budgets() {
 
   if (isLoading || !data) return <PageLoader />
 
-  // Include only budgets belonging to currently tracked categories.
-  const rows = data.budgets.filter((b) =>
-    tracked.some((c) => c.id === b.category_id)
+  // Include only active budgets belonging to currently tracked categories.
+  const rows = data.budgets.filter(
+    (b) =>
+      !b.is_archived &&
+      tracked.some((c) => c.id === b.category_id)
   )
 
   // Include expenses belonging to currently tracked categories.
@@ -173,8 +199,7 @@ export default function Budgets() {
   const monthlyAllowance = sum(rows)
   const totalSpent = sum(trackedExpenses)
 
-  // Match the Dashboard's Budget Remaining calculation:
-  // only expenses in categories with an active budget are deducted.
+  // Only expenses in categories with an active budget are deducted.
   const budgetUsed = rows.reduce(
     (total, budget) =>
       total + (spent.get(budget.category_id) ?? 0),
@@ -183,8 +208,13 @@ export default function Budgets() {
 
   const remainingBudget = monthlyAllowance - budgetUsed
 
+  // A category is available if it has no active budget this month.
+  // Archived budgets must not prevent users from creating a new one.
   const free = tracked.filter(
-    (c) => !data.budgets.some((b) => b.category_id === c.id)
+    (c) =>
+      !data.budgets.some(
+        (b) => b.category_id === c.id && !b.is_archived
+      )
   )
 
   return (
@@ -268,11 +298,13 @@ export default function Budgets() {
           >
             <input
               id="b-amt"
+              type="text"
               inputMode="decimal"
               className={`input ${error.amount ? 'input-bad' : ''}`}
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => handleAmountChange(e.target.value)}
               placeholder="Enter monthly limit"
+              autoComplete="off"
             />
           </Field>
 

@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const sessionRef = useRef<Session | null>(null)
   const userId = session?.user.id
 
   // Initialize and monitor the Supabase session.
@@ -43,11 +44,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!active) return
 
+        const previousUserId = sessionRef.current?.user.id
+        const nextUserId = newSession?.user.id
+
+        sessionRef.current = newSession
         setSession(newSession)
 
         if (!newSession) {
           setProfile(null)
           setLoading(false)
+        } else if (previousUserId !== nextUserId) {
+          setProfile(null)
+          setLoading(true)
         }
       },
     )
@@ -58,13 +66,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data, error } = await supabase.auth.getSession()
 
-        if (!active || error) {
-          if (active) setLoading(false)
+        if (!active) return
+
+        if (error) {
+          console.error('Unable to initialize session:', error)
+          setLoading(false)
           return
         }
 
         // Do not overwrite a newer session received from the auth listener.
         if (versionAtStart === authEventVersion) {
+          sessionRef.current = data.session
           setSession(data.session)
 
           if (!data.session) {
@@ -72,8 +84,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setLoading(false)
           }
         }
-      } catch {
-        if (active) setLoading(false)
+      } catch (error) {
+        console.error('Unable to initialize session:', error)
+
+        if (active) {
+          setLoading(false)
+        }
       }
     }
 
@@ -85,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Fetch a user's profile without allowing stale requests to overwrite state.
+  // Fetch the authenticated user's profile.
   const fetchProfile = useCallback(async (id: string) => {
     const { data, error } = await supabase
       .from('profiles')
@@ -93,9 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('id', id)
       .maybeSingle()
 
-    if (error) {
-      throw error
-    }
+    if (error) throw error
 
     return (data as Profile | null) ?? null
   }, [])

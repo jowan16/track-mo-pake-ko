@@ -35,7 +35,6 @@ import {
   ConfirmDialog,
   Modal,
   PageLoader,
-  PageTitle,
   ProgressBar,
 } from '../../components/ui'
 
@@ -271,19 +270,12 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageTitle title="Dashboard" sub={undefined}>
-        <Link to="/app/budgets" className="btn btn-primary">
-          + Add Budget
-        </Link>
-      </PageTitle>
-
-      <p className="-mt-3 text-sm text-muted">
-        {now.toLocaleString('en-US', {
-          month: 'long',
-          year: 'numeric',
-        })}{' '}
-        · Tracking {tracked.length} categories
-      </p>
+     {/* DASHBOARD ACTIONS */}
+<div className="flex justify-end">
+  <Link to="/app/budgets" className="btn btn-primary">
+    + Add Budget
+  </Link>
+</div>
 
       {/* MONTHLY FINANCIAL SUMMARY */}
       <section

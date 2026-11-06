@@ -1,3 +1,4 @@
+
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -26,6 +27,10 @@ export default function Archive() {
 
   const [tab, setTab] = useState<Tab>('expenses')
   const [pending, setPending] = useState<PendingAction | null>(null)
+
+  // Bulk expense selection states
+  const [selectedExpenses, setSelectedExpenses] = useState<string[]>([])
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
 
   const archived = useQuery({
     queryKey: ['archived-records', profile?.id],
@@ -65,6 +70,7 @@ export default function Archive() {
     },
   })
 
+  // Individual restore and delete mutation
   const action = useMutation({
     mutationFn: async (item: PendingAction) => {
       const table = item.type === 'expense' ? 'expenses' : 'budgets'
@@ -100,10 +106,58 @@ export default function Archive() {
       )
 
       setPending(null)
-      void qc.invalidateQueries()
+
+      if (item.type === 'expense') {
+        setSelectedExpenses((prev) =>
+          prev.filter((id) => id !== item.id)
+        )
+      }
+
+      void qc.invalidateQueries({
+        queryKey: ['archived-records', profile?.id],
+      })
     },
 
     onError: (e) => toast.error(errMsg(e)),
+  })
+
+  // Bulk permanent deletion mutation
+  const bulkDelete = useMutation({
+    mutationFn: async () => {
+      if (!profile?.id || selectedExpenses.length === 0) {
+        throw new Error('No expenses selected.')
+      }
+
+      const idsToDelete = [...selectedExpenses]
+
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('user_id', profile.id)
+        .eq('is_archived', true)
+        .in('id', idsToDelete)
+
+      if (error) throw error
+
+      return idsToDelete.length
+    },
+
+    onSuccess: (deletedCount) => {
+      toast.success(
+        `${deletedCount} expense(s) permanently deleted.`
+      )
+
+      setSelectedExpenses([])
+      setShowBulkDeleteConfirm(false)
+
+      void qc.invalidateQueries({
+        queryKey: ['archived-records', profile?.id],
+      })
+    },
+
+    onError: (error) => {
+      toast.error(errMsg(error))
+    },
   })
 
   if (archived.isLoading) return <PageLoader />
@@ -111,11 +165,13 @@ export default function Archive() {
   if (archived.error || !archived.data) {
     return (
       <>
-<PageTitle title="Archived " />
+        <PageTitle title="Archived" />
+
         <section className="card">
           <p className="text-sm text-danger">
             We could not load your archived records. Please try again.
           </p>
+
           <button
             className="btn mt-3"
             onClick={() => void archived.refetch()}
@@ -129,6 +185,13 @@ export default function Archive() {
 
   const expenses = archived.data.expenses
   const budgets = archived.data.budgets
+
+  // Select All checkbox state
+  const allExpensesSelected =
+    expenses.length > 0 &&
+    expenses.every((expense) =>
+      selectedExpenses.includes(expense.id)
+    )
 
   const monthName = (month: number, year: number) =>
     new Date(year, month - 1).toLocaleString('en-US', {
@@ -150,6 +213,24 @@ export default function Archive() {
     })
   }
 
+  // Select or deselect all expenses
+  const toggleSelectAll = () => {
+    if (allExpensesSelected) {
+      setSelectedExpenses([])
+    } else {
+      setSelectedExpenses(expenses.map((expense) => expense.id))
+    }
+  }
+
+  // Select or deselect an individual expense
+  const toggleExpenseSelection = (id: string) => {
+    setSelectedExpenses((prev) =>
+      prev.includes(id)
+        ? prev.filter((expenseId) => expenseId !== id)
+        : [...prev, id]
+    )
+  }
+
   return (
     <>
       <PageTitle title="Archived" />
@@ -167,107 +248,169 @@ export default function Archive() {
           >
             Expenses ({expenses.length})
           </button>
-
-       
         </div>
 
         {tab === 'expenses' && (
           <>
             {expenses.length === 0 ? (
               <div className="py-8 text-center">
-                <p className="font-semibold">No archived expenses</p>
+                <p className="font-semibold">
+                  No archived expenses
+                </p>
+
                 <p className="mt-1 text-sm text-muted">
                   Expenses you archive will appear here.
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr>
-                      <th className="th">Date</th>
-                      <th className="th">Category</th>
-                      <th className="th">Note</th>
-                      <th className="th text-right">Amount</th>
-                      <th className="th text-right">Actions</th>
-                    </tr>
-                  </thead>
+              <>
+                {/* Bulk Delete Controls */}
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      checked={allExpensesSelected}
+                      onChange={toggleSelectAll}
+                      disabled={bulkDelete.isPending}
+                      aria-label="Select all expenses"
+                      className="h-4 w-4 cursor-pointer accent-[var(--primary)]"
+                    />
 
-                  <tbody>
-                    {expenses.map((expense) => {
-                      const category = catById.get(expense.category_id)
+                    Select All Expenses
+                  </label>
 
-                      return (
-                        <tr key={expense.id}>
-                          <td className="td whitespace-nowrap">
-                            {shortDate(expense.spent_on)}
-                          </td>
+                  {selectedExpenses.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-danger flex items-center gap-2"
+                      onClick={() => setShowBulkDeleteConfirm(true)}
+                      disabled={bulkDelete.isPending || action.isPending}
+                    >
+                      <Trash2 size={16} aria-hidden />
+                      Delete Selected ({selectedExpenses.length})
+                    </button>
+                  )}
+                </div>
 
-                          <td className="td">
-                            <span className="flex items-center gap-2">
-                              {category && (
-                                <CategoryIcon
-                                  category={category}
-                                  size={28}
-                                />
-                              )}
-                              {category?.name ?? 'Unknown category'}
-                            </span>
-                          </td>
+                {selectedExpenses.length > 0 && (
+                  <p className="mb-3 text-sm text-muted">
+                    {selectedExpenses.length} expense(s) selected.
+                  </p>
+                )}
 
-                          <td className="td">
-                            {expense.note || '-'}
-                          </td>
+                {/* Archived Expenses Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr>
+                        <th className="th">Select</th>
+                        <th className="th">Date</th>
+                        <th className="th">Category</th>
+                        <th className="th">Note</th>
+                        <th className="th text-right">Amount</th>
+                        <th className="th text-right">Actions</th>
+                      </tr>
+                    </thead>
 
-                          <td className="td text-right whitespace-nowrap">
-                            {peso(expense.amount)}
-                          </td>
+                    <tbody>
+                      {expenses.map((expense) => {
+                        const category = catById.get(expense.category_id)
 
-                          <td className="td">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                type="button"
-                                className="icon-btn"
-                                title="Restore expense"
-                                aria-label="Restore expense"
-                                disabled={action.isPending}
-                                onClick={() =>
-                                  askAction(
-                                    'expense',
-                                    'restore',
-                                    expense.id,
-                                    `${category?.name ?? 'expense'} · ${peso(expense.amount)}`
-                                  )
+                        return (
+                          <tr key={expense.id}>
+                            {/* Individual Selection */}
+                            <td className="td">
+                              <input
+                                type="checkbox"
+                                checked={selectedExpenses.includes(expense.id)}
+                                onChange={() =>
+                                  toggleExpenseSelection(expense.id)
                                 }
-                              >
-                                <RotateCcw size={18} aria-hidden />
-                              </button>
+                                disabled={bulkDelete.isPending}
+                                aria-label={`Select expense ${expense.id}`}
+                                className="h-4 w-4 cursor-pointer accent-[var(--primary)]"
+                              />
+                            </td>
 
-                              <button
-                                type="button"
-                                className="icon-btn text-danger"
-                                title="Delete permanently"
-                                aria-label="Delete expense permanently"
-                                disabled={action.isPending}
-                                onClick={() =>
-                                  askAction(
-                                    'expense',
-                                    'delete',
-                                    expense.id,
-                                    `${category?.name ?? 'expense'} · ${peso(expense.amount)}`
-                                  )
-                                }
-                              >
-                                <Trash2 size={18} aria-hidden />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                            <td className="td whitespace-nowrap">
+                              {shortDate(expense.spent_on)}
+                            </td>
+
+                            <td className="td">
+                              <span className="flex items-center gap-2">
+                                {category && (
+                                  <CategoryIcon
+                                    category={category}
+                                    size={28}
+                                  />
+                                )}
+
+                                {category?.name ?? 'Unknown category'}
+                              </span>
+                            </td>
+
+                            <td className="td">
+                              {expense.note || '-'}
+                            </td>
+
+                            <td className="td text-right whitespace-nowrap">
+                              {peso(expense.amount)}
+                            </td>
+
+                            <td className="td">
+                              <div className="flex justify-end gap-2">
+                                {/* Restore Expense */}
+                                <button
+                                  type="button"
+                                  className="icon-btn"
+                                  title="Restore expense"
+                                  aria-label="Restore expense"
+                                  disabled={
+                                    action.isPending ||
+                                    bulkDelete.isPending
+                                  }
+                                  onClick={() =>
+                                    askAction(
+                                      'expense',
+                                      'restore',
+                                      expense.id,
+                                      `${category?.name ?? 'expense'} · ${peso(expense.amount)}`
+                                    )
+                                  }
+                                >
+                                  <RotateCcw size={18} aria-hidden />
+                                </button>
+
+                                {/* Delete Individual Expense */}
+                                <button
+                                  type="button"
+                                  className="icon-btn text-danger"
+                                  title="Delete permanently"
+                                  aria-label="Delete expense permanently"
+                                  disabled={
+                                    action.isPending ||
+                                    bulkDelete.isPending
+                                  }
+                                  onClick={() =>
+                                    askAction(
+                                      'expense',
+                                      'delete',
+                                      expense.id,
+                                      `${category?.name ?? 'expense'} · ${peso(expense.amount)}`
+                                    )
+                                  }
+                                >
+                                  <Trash2 size={18} aria-hidden />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </>
         )}
@@ -276,7 +419,10 @@ export default function Archive() {
           <>
             {budgets.length === 0 ? (
               <div className="py-8 text-center">
-                <p className="font-semibold">No archived budgets</p>
+                <p className="font-semibold">
+                  No archived budgets
+                </p>
+
                 <p className="mt-1 text-sm text-muted">
                   Budgets you archive will appear here.
                 </p>
@@ -312,6 +458,7 @@ export default function Archive() {
                                   size={28}
                                 />
                               )}
+
                               {category?.name ?? 'Unknown category'}
                             </span>
                           </td>
@@ -370,6 +517,7 @@ export default function Archive() {
         )}
       </section>
 
+      {/* Individual Action Confirmation */}
       {pending && (
         <ConfirmDialog
           title={
@@ -391,6 +539,19 @@ export default function Archive() {
           busy={action.isPending}
           onConfirm={() => action.mutate(pending)}
           onCancel={() => setPending(null)}
+        />
+      )}
+
+      {/* Bulk Delete Confirmation */}
+      {showBulkDeleteConfirm && (
+        <ConfirmDialog
+          title="Permanently delete selected expenses?"
+          message={`Are you sure you want to permanently delete ${selectedExpenses.length} selected expense(s)? This action cannot be undone.`}
+          confirmLabel="Delete All Selected"
+          danger
+          busy={bulkDelete.isPending}
+          onConfirm={() => bulkDelete.mutate()}
+          onCancel={() => setShowBulkDeleteConfirm(false)}
         />
       )}
     </>

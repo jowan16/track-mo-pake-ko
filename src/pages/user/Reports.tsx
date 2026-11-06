@@ -1,4 +1,3 @@
-
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -174,21 +173,20 @@ export default function Reports() {
           Yearly
         </button>
 
-        <button
-          type="button"
+        <Link
+          to="/app/reports/export?format=pdf"
           className="icon-btn !h-11 !w-11"
-          aria-label="Print or save as PDF"
-          title="Print or save as PDF"
-          onClick={() => window.print()}
+          aria-label="Print or save reports as PDF"
+          title="Print or save reports as PDF"
         >
           <FileText size={20} aria-hidden />
-        </button>
+        </Link>
 
         <Link
-          to="/app/reports/export"
+          to="/app/reports/export?format=csv"
           className="icon-btn !h-11 !w-11"
-          aria-label="CSV reports"
-          title="CSV reports"
+          aria-label="Export reports as CSV"
+          title="Export reports as CSV"
         >
           <Sheet size={20} aria-hidden />
         </Link>

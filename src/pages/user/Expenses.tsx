@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -28,7 +29,10 @@ const schema = z.object({
       (v) => /^\d+(\.\d{1,2})?$/.test(v.trim()) && Number(v) > 0,
       'Enter an amount greater than 0.'
     )
-    .refine((v) => Number(v) <= 9999999.99, 'Amount is too large.'),
+    .refine(
+      (v) => Number(v) <= 9999999.99,
+      'Amount is too large.'
+    ),
   spent_on: z
     .string()
     .min(1, 'Enter a valid date.')
@@ -57,12 +61,12 @@ export default function Expenses() {
   const qc = useQueryClient()
   const [params, setParams] = useSearchParams()
 
-  // The Add / Edit window. "open" shows it, "editing" is the expense being changed (or null for a new one).
+  // Add / Edit window
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
   const [warn, setWarn] = useState<{ values: Form; pct: number } | null>(null)
 
-  // Records table: search, category filter and page.
+  // Records table: search, category filter and page
   const [search, setSearch] = useState(params.get('q') ?? '')
   const [page, setPage] = useState(1)
   const cat = params.get('category') ?? ''
@@ -99,7 +103,7 @@ export default function Expenses() {
     enabled: !!profile,
   })
 
-  // Budget check shown inside the window.
+  // Budget check shown inside the window
   const projected = useMemo(() => {
     if (!catId || !month.data) return null
 
@@ -109,11 +113,14 @@ export default function Expenses() {
 
     if (!budget) return null
 
-    const amt = /^\d+(\.\d{1,2})?$/.test(amountStr) ? Number(amountStr) : 0
+    const amt = /^\d+(\.\d{1,2})?$/.test(amountStr)
+      ? Number(amountStr)
+      : 0
 
-    let spent = spentByCategory(month.data.expenses).get(budget.category_id) ?? 0
+    let spent =
+      spentByCategory(month.data.expenses).get(budget.category_id) ?? 0
 
-    // When editing, do not count the old amount twice.
+    // When editing, do not count the old amount twice
     if (
       editing &&
       editing.category_id === budget.category_id &&
@@ -136,6 +143,7 @@ export default function Expenses() {
   const openEdit = (e: Expense) => {
     setEditing(e)
     setWarn(null)
+
     reset({
       amount: String(e.amount),
       spent_on: e.spent_on,
@@ -143,6 +151,7 @@ export default function Expenses() {
       payment_method: e.payment_method,
       note: e.note ?? '',
     })
+
     setOpen(true)
   }
 
@@ -152,6 +161,7 @@ export default function Expenses() {
     setWarn(null)
   }
 
+  // Save expense mutation
   const save = useMutation({
     mutationFn: async (v: Form) => {
       const row = {
@@ -174,10 +184,12 @@ export default function Expenses() {
 
       if (error) throw error
     },
+
     onSuccess: () => {
       void qc.invalidateQueries()
       closeWindow()
     },
+
     onError: (e) => toast.error(`Could not save. ${errMsg(e)}`),
   })
 
@@ -194,10 +206,11 @@ export default function Expenses() {
     await doSave(v)
   })
 
-  // Active (not archived) expenses of this user.
+  // Active (not archived) expenses of this user
   const list = useQuery({
     queryKey: ['expenses', profile?.id, cat],
     enabled: !!profile,
+
     queryFn: async () => {
       let query = supabase
         .from('expenses')
@@ -230,7 +243,7 @@ export default function Expenses() {
     setPage(1)
   }
 
-  // Search on note, category name, date and amount.
+  // Search on note, category name, date and amount
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
 
@@ -249,12 +262,12 @@ export default function Expenses() {
   const start = (current - 1) * PAGE_SIZE
   const visible = filtered.slice(start, start + PAGE_SIZE)
 
-  // Go back to page 1 when the search changes.
+  // Go back to page 1 when the search changes
   useEffect(() => {
     setPage(1)
   }, [search])
 
-  // Move the selected expense to the Archive page.
+  // Move selected expense to the Archive page
   const archiveExpense = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -266,13 +279,47 @@ export default function Expenses() {
 
       if (error) throw error
     },
+
     onSuccess: () => {
       void qc.invalidateQueries()
     },
+
     onError: (e) => toast.error(errMsg(e)),
   })
 
   const cls = (e?: unknown) => `input ${e ? 'input-bad' : ''}`
+
+  // Numeric-only amount input handler
+  const handleAmountChange = (rawValue: string) => {
+    let value = rawValue
+
+    // Remove all characters except digits and decimal points
+    value = value.replace(/[^\d.]/g, '')
+
+    // Allow only one decimal point
+    const firstDotIndex = value.indexOf('.')
+
+    if (firstDotIndex !== -1) {
+      value =
+        value.slice(0, firstDotIndex + 1) +
+        value.slice(firstDotIndex + 1).replace(/\./g, '')
+    }
+
+    // Limit to two decimal places
+    const parts = value.split('.')
+
+    if (parts.length === 2) {
+      value = `${parts[0]}.${parts[1].slice(0, 2)}`
+    }
+
+    // Update form value and trigger validation
+    setValue('amount', value, {
+      shouldValidate: true,
+      shouldDirty: true,
+    })
+  }
+
+  const amountRegister = register('amount')
 
   return (
     <>
@@ -292,11 +339,18 @@ export default function Expenses() {
       </header>
 
       {/* EXPENSE RECORDS */}
-      <section className="card overflow-hidden border border-line !p-0" aria-label="Expense records">
+      <section
+        className="card overflow-hidden border border-line !p-0"
+        aria-label="Expense records"
+      >
         <div className="flex flex-wrap items-center justify-between gap-3 p-5">
           <div>
-            <h2 className="text-xl font-bold leading-tight">Expense Records</h2>
-            <p className="mt-0.5 text-sm text-muted">{total} transaction(s) found</p>
+            <h2 className="text-xl font-bold leading-tight">
+              Expense Records
+            </h2>
+            <p className="mt-0.5 text-sm text-muted">
+              {total} transaction(s) found
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -306,6 +360,7 @@ export default function Expenses() {
                 aria-hidden
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
               />
+
               <input
                 type="search"
                 aria-label="Search expenses"
@@ -316,8 +371,12 @@ export default function Expenses() {
               />
             </div>
 
-            <label htmlFor="f-cat" className="flex items-center gap-2 text-sm text-muted">
+            <label
+              htmlFor="f-cat"
+              className="flex items-center gap-2 text-sm text-muted"
+            >
               Category:
+
               <select
                 id="f-cat"
                 className="input !w-48"
@@ -325,6 +384,7 @@ export default function Expenses() {
                 onChange={(e) => setCategory(e.target.value)}
               >
                 <option value="">All Categories</option>
+
                 {tracked.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -336,7 +396,9 @@ export default function Expenses() {
         </div>
 
         {list.isLoading ? (
-          <p className="border-t border-line p-5 text-sm text-muted">Loading...</p>
+          <p className="border-t border-line p-5 text-sm text-muted">
+            Loading...
+          </p>
         ) : list.error ? (
           <div className="border-t border-line p-5">
             <div className="banner banner-error" role="alert">
@@ -348,6 +410,7 @@ export default function Expenses() {
             {search || cat ? (
               <>
                 No expenses match your filters.{' '}
+
                 <button
                   type="button"
                   className="text-brand underline"
@@ -372,17 +435,31 @@ export default function Expenses() {
                   <th className="th !px-5 !py-4 !text-sm">Category</th>
                   <th className="th !px-5 !py-4 !text-sm">Note</th>
                   <th className="th !px-5 !py-4 !text-sm">Amount</th>
-                  <th className="th !px-5 !py-4 !text-center !text-sm">Actions</th>
+                  <th className="th !px-5 !py-4 !text-center !text-sm">
+                    Actions
+                  </th>
                 </tr>
               </thead>
 
               <tbody>
                 {visible.map((e) => (
                   <tr key={e.id}>
-                    <td className="td !px-5 !py-4 whitespace-nowrap">{e.spent_on}</td>
-                    <td className="td !px-5 !py-4">{catById.get(e.category_id)?.name}</td>
-                    <td className="td !px-5 !py-4">{e.note || '—'}</td>
-                    <td className="td !px-5 !py-4 whitespace-nowrap font-bold">{peso(e.amount)}</td>
+                    <td className="td !px-5 !py-4 whitespace-nowrap">
+                      {e.spent_on}
+                    </td>
+
+                    <td className="td !px-5 !py-4">
+                      {catById.get(e.category_id)?.name}
+                    </td>
+
+                    <td className="td !px-5 !py-4">
+                      {e.note || '—'}
+                    </td>
+
+                    <td className="td !px-5 !py-4 whitespace-nowrap font-bold">
+                      {peso(e.amount)}
+                    </td>
+
                     <td className="td !px-5 !py-4">
                       <div className="flex items-center justify-center gap-2">
                         <button
@@ -462,17 +539,31 @@ export default function Expenses() {
               onSubmit={(e) => void submit(e)}
               noValidate
             >
-              <Field label="Amount (₱)" htmlFor="amount" error={errors.amount?.message}>
+              {/* AMOUNT FIELD WITH NUMERIC VALIDATION */}
+              <Field
+                label="Amount (₱)"
+                htmlFor="amount"
+                error={errors.amount?.message}
+              >
                 <input
                   id="amount"
+                  type="text"
                   inputMode="decimal"
                   placeholder="0.00"
                   className={cls(errors.amount)}
-                  {...register('amount')}
+                  name={amountRegister.name}
+                  ref={amountRegister.ref}
+                  onBlur={amountRegister.onBlur}
+                  onChange={(e) => handleAmountChange(e.target.value)}
+                  value={amountStr ?? ''}
                 />
               </Field>
 
-              <Field label="Date" htmlFor="spent_on" error={errors.spent_on?.message}>
+              <Field
+                label="Date"
+                htmlFor="spent_on"
+                error={errors.spent_on?.message}
+              >
                 <input
                   id="spent_on"
                   type="date"
@@ -493,6 +584,7 @@ export default function Expenses() {
                   {...register('category_id')}
                 >
                   <option value="">Select category</option>
+
                   {tracked.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -532,10 +624,13 @@ export default function Expenses() {
               </div>
 
               {warn && (
-                <div className="banner banner-warn sm:col-span-2" role="alert">
+                <div
+                  className="banner banner-warn sm:col-span-2"
+                  role="alert"
+                >
                   <b>Budget warning.</b>{' '}
-                  {catById.get(Number(warn.values.category_id))?.name} will reach{' '}
-                  {warn.pct}% of its monthly budget.
+                  {catById.get(Number(warn.values.category_id))?.name} will
+                  reach {warn.pct}% of its monthly budget.
 
                   <div className="mt-2.5 flex gap-2">
                     <button
@@ -563,17 +658,29 @@ export default function Expenses() {
                   className="btn btn-primary"
                   disabled={save.isPending}
                 >
-                  {save.isPending ? 'Saving...' : editing ? 'Save changes' : 'Save expense'}
+                  {save.isPending
+                    ? 'Saving...'
+                    : editing
+                      ? 'Save changes'
+                      : 'Save expense'}
                 </button>
 
-                <button type="button" className="btn" onClick={closeWindow}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={closeWindow}
+                >
                   Cancel
                 </button>
               </div>
             </form>
 
+            {/* QUICK ADD AND BUDGET CHECK */}
             <div className="rounded-xl border border-line p-4">
-              <h3 className="mb-1 text-base font-bold">Quick add</h3>
+              <h3 className="mb-1 text-base font-bold">
+                Quick add
+              </h3>
+
               <p className="mb-3 text-[13px] text-muted">
                 Tap an icon to choose a tracked category.
               </p>
@@ -596,17 +703,26 @@ export default function Expenses() {
                       }
                       className="flex flex-col items-center gap-1.5"
                     >
-                      <CategoryIcon category={c} size={56} ring={on} />
+                      <CategoryIcon
+                        category={c}
+                        size={56}
+                        ring={on}
+                      />
+
                       <span
                         className="h-1 w-6 rounded-sm"
-                        style={{ background: on ? c.color : 'transparent' }}
+                        style={{
+                          background: on ? c.color : 'transparent',
+                        }}
                       />
                     </button>
                   )
                 })}
               </div>
 
-              <h3 className="mb-1 mt-5 text-base font-bold">Budget check</h3>
+              <h3 className="mb-1 mt-5 text-base font-bold">
+                Budget check
+              </h3>
 
               <p className="text-sm text-muted">
                 {projected === null
