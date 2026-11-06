@@ -4,7 +4,7 @@ import { Link, useBlocker, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { SESSION_FLAG } from '../../context/AuthContext'
 import { Field } from '../../components/ui'
@@ -196,12 +196,24 @@ export default function Login() {
       open={true}
       onClose={() => {}}
     >
-      <form
-        className="card flex flex-col gap-3.5 !p-7"
+           <form
+        className="card flex flex-col gap-4 !p-8"
         onSubmit={form.handleSubmit(onSubmit)}
         noValidate
       >
-        <h2 className="text-[22px] font-bold">Log in</h2>
+        {/* HEADER (extra right space so the close button never overlaps it) */}
+        <div className="flex items-center gap-3.5 pr-8">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-teal-300 to-emerald-500 text-xl font-bold text-[#0a211c] shadow-md shadow-teal-900/20">
+            ₱
+          </span>
+
+          <div>
+            <h2 className="text-[22px] font-bold leading-tight">Welcome back</h2>
+            <p className="mt-0.5 text-sm text-muted">
+              Log in to continue to Track Mo, Pake ko!
+            </p>
+          </div>
+        </div>
 
         {banner && (
           <div className="banner banner-error" role="alert">
@@ -209,80 +221,120 @@ export default function Login() {
           </div>
         )}
 
+        {/* EMAIL */}
         <Field
           label="Email"
           htmlFor="email"
           error={form.formState.errors.email?.message}
         >
-          <input
-            id="email"
-            type="email"
-            autoComplete="email"
-            aria-invalid={!!form.formState.errors.email}
-            className={`input ${bad(form.formState.errors.email)}`}
-            {...form.register('email', {
-              onChange: () => setBanner(''),
-            })}
-          />
+          <div className="relative">
+            <Mail
+              size={18}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"
+            />
+
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              aria-invalid={!!form.formState.errors.email}
+              className={`input !h-12 !pl-10 ${bad(form.formState.errors.email)}`}
+              {...form.register('email', {
+                onChange: () => setBanner(''),
+              })}
+            />
+          </div>
         </Field>
 
+        {/* PASSWORD */}
         <Field
           label="Password"
           htmlFor="password"
           error={form.formState.errors.password?.message}
         >
           <div className="relative">
+            <Lock
+              size={18}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"
+            />
+
             <input
               id="password"
               type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
+              placeholder="Enter your password"
               aria-invalid={!!form.formState.errors.password}
-              className={`input !pr-11 ${bad(form.formState.errors.password)}`}
-              {...form.register('password')}
+              className={`input !h-12 !pl-10 !pr-12 ${bad(form.formState.errors.password)}`}
+              {...form.register('password', {
+                onChange: () => setBanner(''),
+              })}
             />
 
             <button
               type="button"
-              onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded text-muted hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              onClick={() => setShowPassword((previous) => !previous)}
+              className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted transition hover:bg-gray-100 hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               aria-pressed={showPassword}
             >
               {showPassword ? (
-                <EyeOff size={20} aria-hidden />
+                <EyeOff size={20} aria-hidden="true" />
               ) : (
-                <Eye size={20} aria-hidden />
+                <Eye size={20} aria-hidden="true" />
               )}
             </button>
           </div>
         </Field>
 
-        <div className="text-right text-sm">
-          <Link to="/forgot-password" className="text-brand underline">
+        <div className="-mt-1 text-right text-sm">
+          <Link
+            to="/forgot-password"
+            className="font-medium text-brand underline-offset-2 hover:underline"
+          >
             Forgot password?
           </Link>
         </div>
 
-      <button
-  type="submit"
-  className="btn btn-primary !h-[46px] flex items-center justify-center gap-2"
-  disabled={busy}
->
-  {busy && (
-    <span
-      className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
-      aria-hidden="true"
-    />
-  )}
-  <span>{busy ? 'Please wait' : 'Log in'}</span>
-</button>
+        {/* LOG IN BUTTON */}
+        <button
+          type="submit"
+          className="btn btn-primary !h-12 text-[15px] shadow-md shadow-teal-900/20"
+          disabled={busy}
+        >
+          {busy ? (
+            <>
+              <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.3" strokeWidth="3" />
+                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+              Logging in...
+            </>
+          ) : (
+            <>
+              Log in
+              <ArrowRight size={18} aria-hidden="true" />
+            </>
+          )}
+        </button>
 
-        <div className="text-center text-sm text-muted">
-          New here?{' '}
-          <Link to="/signup" className="text-brand underline">
-            Create an account
-          </Link>
+        {/* CREATE ACCOUNT */}
+        <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
+          <span className="h-px flex-1 bg-line" />
+          New to Track Mo?
+          <span className="h-px flex-1 bg-line" />
         </div>
+
+        <Link to="/signup" className="btn !h-11 w-full">
+          Create an account
+        </Link>
+
+        <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted">
+          <ShieldCheck size={14} aria-hidden="true" />
+          Users and administrators log in here. Your data is protected.
+        </p>
       </form>
     </AuthShell>
   )

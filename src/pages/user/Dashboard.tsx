@@ -1,64 +1,59 @@
-
-import { useEffect, useState } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
 import {
-  Bar,
-  BarChart,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  XAxis,
-} from 'recharts'
-import { Plus } from 'lucide-react'
-import toast from 'react-hot-toast'
+  ArrowDownRight,
+  ArrowUpRight,
+  LayoutGrid,
+  PiggyBank,
+  Plus,
+  Receipt,
+  TrendingDown,
+} from 'lucide-react'
+
 import { useAuth } from '../../context/AuthContext'
 import { useUserData } from '../../context/UserData'
 import { CategoryIcon } from '../../lib/icons'
-import { supabase } from '../../lib/supabase'
-import {
-  fetchBudgets,
-  fetchExpenses,
-  spentByCategory,
-  sum,
-} from '../../lib/queries'
-import {
-  errMsg,
-  monthStart,
-  nextMonthStart,
-  pad,
-  peso,
-  shortDate,
-} from '../../lib/format'
-import {
-  ConfirmDialog,
-  Modal,
-  PageLoader,
-  ProgressBar,
-} from '../../components/ui'
+import { fetchBudgets, fetchExpenses, spentByCategory, sum } from '../../lib/queries'
+import { monthStart, nextMonthStart, pad, peso, shortDate } from '../../lib/format'
+import { PageLoader, ProgressBar } from '../../components/ui'
+
+type IconCmp = ComponentType<{ size?: number; 'aria-hidden'?: boolean }>
+
+/** A number card with a colored icon tile, like the cards on the Budgets page. */
+function StatCard({
+  label,
+  value,
+  note,
+  icon: Icon,
+  tile,
+  valueClass = '',
+}: {
+  label: string
+  value: string
+  note: ReactNode
+  icon: IconCmp
+  tile: string
+  valueClass?: string
+}) {
+  return (
+    <div className="rounded-2xl border border-line bg-white p-5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-muted">{label}</span>
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tile}`}>
+          <Icon size={20} aria-hidden />
+        </span>
+      </div>
+      <p className={`mt-3 text-[28px] font-bold leading-none ${valueClass}`}>{value}</p>
+      <p className="mt-2 text-xs text-muted">{note}</p>
+    </div>
+  )
+}
 
 export default function Dashboard() {
   const { profile } = useAuth()
-  const {
-    tracked,
-    trackedIds,
-    pickerOptions,
-    catById,
-    refresh,
-  } = useUserData()
-
-  const [categoryModalOpen, setCategoryModalOpen] = useState(false)
-  const [pickedCategories, setPickedCategories] = useState<Set<number>>(
-    new Set(trackedIds),
-  )
-  const [categoryError, setCategoryError] = useState('')
-  const [confirmUntrack, setConfirmUntrack] = useState<string[] | null>(null)
-  const [savingCategories, setSavingCategories] = useState(false)
-
-  useEffect(() => {
-    setPickedCategories(new Set(trackedIds))
-  }, [trackedIds])
+  const { tracked, catById } = useUserData()
 
   const now = new Date()
   const y = now.getFullYear()
@@ -66,6 +61,7 @@ export default function Dashboard() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['dashboard', profile?.id],
+    enabled: !!profile,
     queryFn: async () => {
       const first = new Date(y, m - 6, 1)
 
@@ -78,181 +74,57 @@ export default function Dashboard() {
         fetchBudgets(m, y, profile!.id),
       ])
 
-      return {
-        expenses,
-        budgets,
-      }
+      return { expenses, budgets }
     },
-    enabled: !!profile,
   })
-
-  // Apply category changes to Supabase.
-  const applyCategoryChanges = async (
-    added: number[],
-    removed: number[],
-  ) => {
-    if (!profile) return
-
-    if (removed.length) {
-      const { error } = await supabase
-        .from('user_categories')
-        .delete()
-        .eq('user_id', profile.id)
-        .in('category_id', removed)
-
-      if (error) {
-        toast.error(errMsg(error))
-        return
-      }
-    }
-
-    if (added.length) {
-      const { error } = await supabase
-        .from('user_categories')
-        .insert(
-          added.map((category_id) => ({
-            user_id: profile.id,
-            category_id,
-          })),
-        )
-
-      if (error) {
-        toast.error(errMsg(error))
-        return
-      }
-    }
-
-    await refresh()
-    setConfirmUntrack(null)
-    setCategoryModalOpen(false)
-    toast.success('Categories saved.')
-  }
-
-  // Save selected categories.
-  const saveCategories = async () => {
-    if (!profile) return
-
-    if (pickedCategories.size === 0) {
-      setCategoryError('Select at least one category to continue.')
-      return
-    }
-
-    setCategoryError('')
-    setSavingCategories(true)
-
-    try {
-      const added = [...pickedCategories].filter(
-        (id) => !trackedIds.has(id),
-      )
-
-      const removed = [...trackedIds].filter(
-        (id) => !pickedCategories.has(id),
-      )
-
-      if (removed.length) {
-        const currentDate = new Date()
-
-        const budgets = await fetchBudgets(
-          currentDate.getMonth() + 1,
-          currentDate.getFullYear(),
-          profile.id,
-        )
-
-        const withBudget = removed
-          .filter((id) =>
-            budgets.some((budget) => budget.category_id === id),
-          )
-          .map((id) => catById.get(id)?.name ?? 'A category')
-
-        if (withBudget.length) {
-          setConfirmUntrack(withBudget)
-          return
-        }
-      }
-
-      await applyCategoryChanges(added, removed)
-    } catch (error) {
-      toast.error(errMsg(error))
-    } finally {
-      setSavingCategories(false)
-    }
-  }
-
-  // Confirm untracking categories that have budgets.
-  const confirmCategoryChanges = async () => {
-    const added = [...pickedCategories].filter(
-      (id) => !trackedIds.has(id),
-    )
-
-    const removed = [...trackedIds].filter(
-      (id) => !pickedCategories.has(id),
-    )
-
-    await applyCategoryChanges(added, removed)
-  }
 
   if (isLoading) return <PageLoader />
 
-  if (error) {
-    console.error('Dashboard loading error:', error)
-
-    const errorDetails =
-      error instanceof Error
-        ? `${error.name}: ${error.message}\n${error.stack ?? ''}`
-        : JSON.stringify(error, null, 2) ?? String(error)
-
+  if (error || !data) {
     return (
       <div className="banner banner-error" role="alert">
-        <p>We could not load your dashboard.</p>
-        <pre className="mt-2 text-sm whitespace-pre-wrap">
-          {errorDetails}
-        </pre>
+        We could not load your dashboard. Please try again.
       </div>
     )
   }
 
-  if (!data) {
-    return (
-      <div className="banner banner-error" role="alert">
-        Dashboard data is empty. Please try again.
-      </div>
-    )
-  }
+  // ---- numbers ----
+  const trackedIds = new Set(tracked.map((c) => c.id))
+  const mine = data.expenses.filter((e) => trackedIds.has(e.category_id) && !e.is_archived)
 
-  const monthStr = monthStart(y, m)
+  const thisKey = `${y}-${pad(m)}`
+  const lastDate = new Date(y, m - 2, 1)
+  const lastKey = `${lastDate.getFullYear()}-${pad(lastDate.getMonth() + 1)}`
 
-  const mine = data.expenses.filter((e) =>
-    trackedIds.has(e.category_id),
-  )
+  const thisMonth = mine.filter((e) => e.spent_on.startsWith(thisKey))
+  const lastMonth = mine.filter((e) => e.spent_on.startsWith(lastKey))
 
-  const thisMonth = mine.filter((e) => e.spent_on >= monthStr)
+  const totalExpense = sum(thisMonth)
+  const lastTotal = sum(lastMonth)
+  const change = lastTotal > 0 ? Math.round(((totalExpense - lastTotal) / lastTotal) * 100) : null
+
   const spent = spentByCategory(thisMonth)
 
-  const budgetRows = data.budgets.filter((b) =>
-    trackedIds.has(b.category_id),
+  const budgetRows = data.budgets.filter(
+    (b) => trackedIds.has(b.category_id) && (b as { is_archived?: boolean }).is_archived !== true,
   )
-
   const budgetTotal = sum(budgetRows)
+  const budgetUsed = budgetRows.reduce((t, b) => t + (spent.get(b.category_id) ?? 0), 0)
+  const remaining = budgetTotal - budgetUsed
+  const usedPct = budgetTotal > 0 ? (budgetUsed / budgetTotal) * 100 : 0
 
-  const budgetUsed = budgetRows.reduce(
-    (t, b) => t + (spent.get(b.category_id) ?? 0),
-    0,
-  )
-
-  // Dashboard summary values for the current month.
-  const totalExpense = sum(thisMonth)
-  const budgetRemaining = budgetTotal - budgetUsed
-  const trackedCategoryCount = tracked.length
-  const expenseEntries = thisMonth.length
+  const health =
+    budgetTotal === 0
+      ? { label: 'No budget set', cls: 'bg-white/15 text-white' }
+      : usedPct > 100
+        ? { label: 'Over budget', cls: 'bg-[#fee2e2] text-[#b42318]' }
+        : usedPct >= 80
+          ? { label: 'Near the limit', cls: 'bg-[#fef3c7] text-[#92400e]' }
+          : { label: 'On track', cls: 'bg-[#dcfce7] text-[#166534]' }
 
   const donut = tracked
-    .map((c) => ({
-      name: c.name,
-      value: spent.get(c.id) ?? 0,
-      color: c.color,
-    }))
+    .map((c) => ({ name: c.name, value: spent.get(c.id) ?? 0, color: c.color }))
     .filter((d) => d.value > 0)
-
   const donutTotal = donut.reduce((t, d) => t + d.value, 0)
 
   const trend = Array.from({ length: 6 }, (_, i) => {
@@ -261,151 +133,198 @@ export default function Dashboard() {
 
     return {
       label: d.toLocaleString('en-US', { month: 'short' }),
-      total: sum(
-        mine.filter((e) => e.spent_on.startsWith(key)),
-      ),
+      total: sum(mine.filter((e) => e.spent_on.startsWith(key))),
       current: i === 5,
     }
   })
 
+  const recent = [...thisMonth].sort((a, b) => (a.spent_on < b.spent_on ? 1 : -1)).slice(0, 5)
+
+  const first = (profile?.full_name ?? '').trim().split(' ')[0]
+  const hour = now.getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+
   return (
     <>
-     {/* DASHBOARD ACTIONS */}
-<div className="flex justify-end">
-  <Link to="/app/budgets" className="btn btn-primary">
-    + Add Budget
-  </Link>
-</div>
-
-      {/* MONTHLY FINANCIAL SUMMARY */}
+      {/* WELCOME */}
       <section
-        className="grid grid-cols-2 gap-4 lg:grid-cols-4"
-        aria-label="Monthly financial summary"
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0b3d36] via-[#0f766e] to-[#14a193] p-6 text-white sm:p-7"
+        aria-label="Summary"
       >
-        <div className="card">
-          <div className="text-[13px] text-muted">Total Expense</div>
-          <div className="mt-1.5 text-[26px] font-bold">
-            {peso(totalExpense)}
+        <div aria-hidden className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-16 right-24 h-40 w-40 rounded-full bg-amber-300/15 blur-2xl" />
+
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm text-white/80">
+              {now.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+            </p>
+            <h2 className="mt-1 text-2xl font-bold leading-tight">
+              {greeting}{first ? `, ${first}` : ''}
+            </h2>
+            <p className="mt-1.5 max-w-xl text-sm text-white/85">
+              {budgetTotal > 0
+                ? `You have spent ${peso(budgetUsed)} of your ${peso(budgetTotal)} budget this month.`
+                : 'Set a monthly budget for your categories to see how much you have left.'}
+            </p>
           </div>
-          <p className="mt-1 text-xs text-muted">
-            Total recorded expenses this month
-          </p>
+
+          <div className="flex flex-wrap gap-2.5">
+            <Link
+              to="/app/expenses"
+              className="btn !border-transparent !bg-white !text-[#0f766e] hover:!bg-white/90"
+            >
+              <Plus size={18} aria-hidden />
+              Add Expense
+            </Link>
+            <Link
+              to="/app/budgets"
+              className="btn !border-white/40 !bg-white/10 !text-white hover:!bg-white/20"
+            >
+              <Plus size={18} aria-hidden />
+              Add Budget
+            </Link>
+          </div>
         </div>
 
-        <div className="card">
-          <div className="text-[13px] text-muted">Budget Remaining</div>
+        <div className="relative mt-5">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${health.cls}`}>{health.label}</span>
+            {budgetTotal > 0 && <span className="text-white/85">{Math.round(usedPct)}% of budget used</span>}
+          </div>
           <div
-            className={`mt-1.5 text-[26px] font-bold ${
-              budgetRemaining < 0 ? 'text-danger' : 'text-brand'
-            }`}
+            className="h-2.5 rounded-full bg-white/20"
+            role="progressbar"
+            aria-label="Budget used"
+            aria-valuenow={Math.round(Math.min(usedPct, 100))}
+            aria-valuemin={0}
+            aria-valuemax={100}
           >
-            {peso(budgetRemaining)}
+            <div
+              className="h-2.5 rounded-full bg-white transition-all"
+              style={{ width: `${Math.min(usedPct, 100)}%` }}
+            />
           </div>
-          <p className="mt-1 text-xs text-muted">
-            Remaining from your set budget
-          </p>
-        </div>
-
-        <div className="card">
-          <div className="text-[13px] text-muted">Track Categories</div>
-          <div className="mt-1.5 text-[26px] font-bold">
-            {trackedCategoryCount}
-          </div>
-          <p className="mt-1 text-xs text-muted">
-            Number of categories you track
-          </p>
-        </div>
-
-        <div className="card">
-          <div className="text-[13px] text-muted">Expenses Entries</div>
-          <div className="mt-1.5 text-[26px] font-bold">
-            {expenseEntries}
-          </div>
-          <p className="mt-1 text-xs text-muted">
-            Number of recorded expenses this month
-          </p>
         </div>
       </section>
 
-      {/* YOUR CATEGORIES */}
+      {/* NUMBERS */}
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4" aria-label="Totals">
+        <StatCard
+          label="Total Expense"
+          value={peso(totalExpense)}
+          icon={TrendingDown}
+          tile="bg-[#fee8ea] text-[#dc2626]"
+          note={
+            change === null ? (
+              'Total recorded expenses this month'
+            ) : (
+              <span className={`inline-flex items-center gap-1 font-semibold ${change > 0 ? 'text-[#b42318]' : 'text-[#166534]'}`}>
+                {change > 0 ? <ArrowUpRight size={14} aria-hidden /> : <ArrowDownRight size={14} aria-hidden />}
+                {Math.abs(change)}% {change > 0 ? 'higher' : 'lower'} than last month
+              </span>
+            )
+          }
+        />
+
+        <StatCard
+          label="Budget Remaining"
+          value={budgetTotal > 0 ? peso(remaining) : '—'}
+          icon={PiggyBank}
+          tile="bg-[#e6f4f1] text-[#0f766e]"
+          valueClass={budgetTotal > 0 ? (remaining < 0 ? 'text-danger' : 'text-brand') : ''}
+          note={budgetTotal > 0 ? 'Remaining from your set budget' : 'No budget set yet'}
+        />
+
+        <StatCard
+          label="Tracked Categories"
+          value={String(tracked.length)}
+          icon={LayoutGrid}
+          tile="bg-[#eaedff] text-[#4338ca]"
+          note="Number of categories you track"
+        />
+
+        <StatCard
+          label="Expense Entries"
+          value={String(thisMonth.length)}
+          icon={Receipt}
+          tile="bg-[#fff1e0] text-[#c2410c]"
+          note="Number of recorded expenses this month"
+        />
+      </section>
+
+      {/* CATEGORIES */}
       <section>
-        <div className="mb-2.5 flex items-baseline justify-between">
+        <div className="mb-2.5 flex items-baseline justify-between gap-3">
           <h2 className="text-base font-bold">Your categories</h2>
-          <span className="text-[13px] text-muted">
-            Tap an icon to open that category
-          </span>
+          <span className="text-[13px] text-muted">Tap an icon to open that category</span>
         </div>
 
-        <div className="card flex flex-wrap gap-5">
+        <div className="card flex flex-wrap gap-5 border border-line">
           {tracked.map((c) => (
             <Link
               key={c.id}
               to={`/app/expenses?category=${c.id}`}
-              aria-label={c.name}
-              title={c.name}
-              className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand"
+              aria-label={`${c.name}: ${peso(spent.get(c.id) ?? 0)} this month`}
+              title={`${c.name}: ${peso(spent.get(c.id) ?? 0)} this month`}
+              className="rounded-full transition hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand"
             >
               <CategoryIcon category={c} size={68} />
             </Link>
           ))}
 
-          {/* ADD / MANAGE CATEGORY ICON */}
-          <button
-            type="button"
-            onClick={() => {
-              setPickedCategories(new Set(trackedIds))
-              setCategoryError('')
-              setCategoryModalOpen(true)
-            }}
-            aria-label="Manage categories"
-            title="Manage categories"
-            className="flex h-[68px] w-[68px] items-center justify-center rounded-full border-2 border-dashed border-[#9aa6a1] text-muted transition-colors hover:border-brand hover:text-brand"
+          <Link
+            to="/app/settings"
+            aria-label="Add category"
+            title="Add category"
+            className="flex h-[68px] w-[68px] items-center justify-center rounded-full border-2 border-dashed border-[#9aa6a1] text-muted transition hover:border-brand hover:text-brand"
           >
             <Plus size={28} aria-hidden />
-          </button>
+          </Link>
         </div>
       </section>
 
       {/* CHARTS */}
       <section className="grid gap-4 lg:grid-cols-2">
-        <div className="card">
-          <h2 className="mb-3 text-base font-bold">
-            Spending by category
-          </h2>
+        <div className="card border border-line">
+          <h2 className="text-base font-bold">Spending by category</h2>
+          <p className="mb-3 text-sm text-muted">Where your money went this month.</p>
 
           {donut.length === 0 ? (
-            <p className="text-sm text-muted">
-              Add your first expense to see charts and reports.
+            <p className="py-6 text-sm text-muted">
+              No expenses recorded this month yet.{' '}
+              <Link to="/app/expenses" className="text-brand underline">Add an expense</Link>
             </p>
           ) : (
             <div className="flex flex-wrap items-center gap-6">
-              <div
-                className="h-40 w-40"
-                role="img"
-                aria-label="Donut chart of spending by category"
-              >
+              <div className="relative h-44 w-44" role="img" aria-label="Donut chart of spending by category">
                 <ResponsiveContainer>
                   <PieChart>
-                    <Pie
-                      data={donut}
-                      dataKey="value"
-                      innerRadius={42}
-                      outerRadius={72}
-                      stroke="none"
-                    >
+                    <Pie data={donut} dataKey="value" innerRadius={56} outerRadius={84} paddingAngle={2} stroke="none">
                       {donut.map((d) => (
                         <Cell key={d.name} fill={d.color} />
                       ))}
                     </Pie>
+                    <Tooltip formatter={(v) => peso(Number(v))} />
                   </PieChart>
                 </ResponsiveContainer>
+
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[11px] text-muted">Total</span>
+                  <span className="text-base font-bold">{peso(donutTotal)}</span>
+                </div>
               </div>
 
-              <ul className="flex flex-col gap-2 text-sm">
+              <ul className="flex min-w-[180px] flex-1 flex-col gap-2.5 text-sm">
                 {donut.map((d) => (
-                  <li key={d.name}>
-                    <b style={{ color: d.color }}>■</b> {d.name} ·{' '}
-                    {Math.round((d.value / donutTotal) * 100)}%
+                  <li key={d.name} className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2">
+                      <span className="h-3 w-3 rounded-sm" style={{ background: d.color }} />
+                      {d.name}
+                    </span>
+                    <span className="text-muted">
+                      {peso(d.value)} · {Math.round((d.value / donutTotal) * 100)}%
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -413,28 +332,18 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="card">
-          <h2 className="mb-3 text-base font-bold">Monthly trend</h2>
+        <div className="card border border-line">
+          <h2 className="text-base font-bold">Monthly trend</h2>
+          <p className="mb-3 text-sm text-muted">Your spending over the last six months.</p>
 
-          <div
-            className="h-40"
-            role="img"
-            aria-label="Bar chart of monthly spending"
-          >
+          <div className="h-48" role="img" aria-label="Bar chart of monthly spending">
             <ResponsiveContainer>
-              <BarChart data={trend}>
-                <XAxis
-                  dataKey="label"
-                  axisLine={false}
-                  tickLine={false}
-                  fontSize={12}
-                />
-                <Bar dataKey="total" radius={[2, 2, 0, 0]}>
+              <BarChart data={trend} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+                <XAxis dataKey="label" axisLine={false} tickLine={false} fontSize={12} />
+                <Tooltip cursor={{ fill: 'rgba(15,118,110,0.06)' }} formatter={(v) => peso(Number(v))} />
+                <Bar dataKey="total" name="Spent" radius={[6, 6, 0, 0]} maxBarSize={44}>
                   {trend.map((t) => (
-                    <Cell
-                      key={t.label}
-                      fill={t.current ? '#0f766e' : '#a0d3cc'}
-                    />
+                    <Cell key={t.label} fill={t.current ? '#0f766e' : '#a0d3cc'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -443,22 +352,17 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* RECENT TRANSACTIONS AND BUDGET PROGRESS */}
+      {/* RECENT AND BUDGETS */}
       <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <div className="card overflow-x-auto">
-          <h2 className="mb-2 text-base font-bold">
-            Recent transactions
-          </h2>
+        <div className="card overflow-x-auto border border-line">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h2 className="text-base font-bold">Recent transactions</h2>
+            <Link to="/app/expenses" className="text-sm text-brand underline">View all</Link>
+          </div>
 
-          {mine.length === 0 ? (
-            <p className="text-sm text-muted">
-              No expenses yet.{' '}
-              <Link
-                to="/app/expenses"
-                className="text-brand underline"
-              >
-                Add expense
-              </Link>
+          {recent.length === 0 ? (
+            <p className="py-4 text-sm text-muted">
+              No expenses yet. <Link to="/app/expenses" className="text-brand underline">Add expense</Link>
             </p>
           ) : (
             <table className="w-full">
@@ -470,16 +374,13 @@ export default function Dashboard() {
                   <th className="th text-right">Amount</th>
                 </tr>
               </thead>
-
               <tbody>
-                {mine.slice(0, 5).map((e) => (
+                {recent.map((e) => (
                   <tr key={e.id}>
-                    <td className="td">{shortDate(e.spent_on)}</td>
-                    <td className="td">{e.note || '-'}</td>
-                    <td className="td">
-                      {catById.get(e.category_id)?.name}
-                    </td>
-                    <td className="td text-right">{peso(e.amount)}</td>
+                    <td className="td whitespace-nowrap">{shortDate(e.spent_on)}</td>
+                    <td className="td">{e.note || '—'}</td>
+                    <td className="td">{catById.get(e.category_id)?.name}</td>
+                    <td className="td whitespace-nowrap text-right font-semibold">{peso(e.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -487,41 +388,38 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="card">
-          <h2 className="mb-3 text-base font-bold">Budget progress</h2>
+        <div className="card border border-line">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-base font-bold">Budget progress</h2>
+            <Link to="/app/budgets" className="text-sm text-brand underline">Manage</Link>
+          </div>
 
           {budgetRows.length === 0 ? (
             <p className="text-sm text-muted">
-              No budgets yet.{' '}
-              <Link
-                to="/app/budgets"
-                className="text-brand underline"
-              >
-                Set a budget
-              </Link>
+              No budgets yet. <Link to="/app/budgets" className="text-brand underline">Set a budget</Link>
             </p>
           ) : (
             <div className="flex flex-col gap-4">
               {budgetRows.map((b) => {
-                const pct =
-                  ((spent.get(b.category_id) ?? 0) / b.amount) * 100
+                const c = catById.get(b.category_id)
+                const s = spent.get(b.category_id) ?? 0
+                const pct = (s / b.amount) * 100
 
                 return (
                   <div key={b.id} className="text-sm">
-                    <div className="mb-1.5 flex justify-between">
-                      <span>
-                        {catById.get(b.category_id)?.name}
+                    <div className="mb-1.5 flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-2 font-medium">
+                        {c && <CategoryIcon category={c} size={24} />}
+                        {c?.name}
                       </span>
-                      <span>{Math.round(pct)}% used</span>
+                      <span className="text-muted">{peso(s)} / {peso(b.amount)}</span>
                     </div>
-
                     <ProgressBar percent={pct} />
-
-                    {pct >= 80 && (
-                      <div className="mt-1.5 text-[13px] text-[#b45309]">
-                        Warning: near the 100% limit
-                      </div>
-                    )}
+                    {pct >= 100 ? (
+                      <div className="mt-1.5 text-[13px] font-medium text-danger">Over budget</div>
+                    ) : pct >= 80 ? (
+                      <div className="mt-1.5 text-[13px] text-[#b45309]">Warning: near the 100% limit</div>
+                    ) : null}
                   </div>
                 )
               })}
@@ -529,110 +427,6 @@ export default function Dashboard() {
           )}
         </div>
       </section>
-
-      {/* MANAGE CATEGORIES MODAL */}
-      {categoryModalOpen && (
-        <Modal
-          title="Manage Categories"
-          onClose={() => setCategoryModalOpen(false)}
-        >
-          <div className="flex flex-col gap-4">
-            <p className="text-sm leading-relaxed text-muted">
-              Select the categories you want to track. Untracked categories
-              will be hidden from expense forms and dashboard charts. Past
-              records will be kept.
-            </p>
-
-            {/* ORGANIZED CATEGORY GRID */}
-            <div className="grid grid-cols-2 gap-3 border-y border-line py-4 lg:grid-cols-3">
-              {pickerOptions.map((category) => {
-                const isSelected = pickedCategories.has(category.id)
-
-                return (
-                  <label
-                    key={category.id}
-                    className={`flex min-h-[105px] min-w-0 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center transition-colors ${
-                      isSelected
-                        ? 'border-brand bg-[var(--surface)]'
-                        : 'border-line hover:bg-[var(--surface)]'
-                    }`}
-                  >
-                    {/* CATEGORY NAME */}
-                    <span className="w-full break-words text-sm font-semibold leading-snug text-main">
-                      {category.name}
-                    </span>
-
-                    {/* CHECKBOX AND ICON */}
-                    <div className="flex items-center justify-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 shrink-0 accent-[var(--accent)]"
-                        checked={isSelected}
-                        onChange={() => {
-                          setCategoryError('')
-
-                          setPickedCategories((current) => {
-                            const next = new Set(current)
-
-                            if (next.has(category.id)) {
-                              next.delete(category.id)
-                            } else {
-                              next.add(category.id)
-                            }
-
-                            return next
-                          })
-                        }}
-                      />
-
-                      <CategoryIcon category={category} size={36} />
-                    </div>
-                  </label>
-                )
-              })}
-            </div>
-
-            {categoryError && (
-              <p className="field-error" role="alert">
-                {categoryError}
-              </p>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => void saveCategories()}
-                disabled={savingCategories}
-              >
-                {savingCategories ? 'Saving...' : 'Save Categories'}
-              </button>
-
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setCategoryModalOpen(false)}
-                disabled={savingCategories}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* CONFIRMATION BEFORE UNTRACKING CATEGORIES WITH BUDGETS */}
-      {confirmUntrack && (
-        <ConfirmDialog
-          title="Stop tracking these categories?"
-          message={`${confirmUntrack.join(', ')} ${
-            confirmUntrack.length > 1 ? 'have budgets' : 'has a budget'
-          }. Untracking pauses alerts. Past records are kept.`}
-          confirmLabel="Untrack"
-          onConfirm={() => void confirmCategoryChanges()}
-          onCancel={() => setConfirmUntrack(null)}
-        />
-      )}
     </>
   )
 }
