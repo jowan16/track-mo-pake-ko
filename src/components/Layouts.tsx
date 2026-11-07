@@ -146,7 +146,7 @@ function Shell({
 
       <main className="min-w-0 flex-1">
         {!admin && (
-          <header className="flex min-h-[72px] items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
+          <header className="sticky top-0 z-50 flex min-h-[72px] items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 shadow-sm sm:px-8">
             <div className="min-w-0">
               <h1 className="text-lg font-bold leading-tight text-slate-800">
                 {pageMeta.title}

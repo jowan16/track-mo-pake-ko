@@ -331,10 +331,7 @@ export default function Login() {
           Create an account
         </Link>
 
-        <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted">
-          <ShieldCheck size={14} aria-hidden="true" />
-          Users and administrators log in here. Your data is protected.
-        </p>
+       
       </form>
     </AuthShell>
   )
