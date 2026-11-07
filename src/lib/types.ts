@@ -11,6 +11,8 @@ export interface Profile {
   warn_100: boolean
   email_alerts: boolean
   daily_reminder: boolean
+   daily_reminder_time: string
+  daily_reminder_timezone: string
   created_at: string
 }
 

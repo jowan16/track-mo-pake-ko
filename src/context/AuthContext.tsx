@@ -132,11 +132,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const load = async () => {
       try {
-        const result = await fetchProfile(userId)
+   const result = await fetchProfile(userId)
 
-        if (active) {
-          setProfile(result)
-        }
+if (active) {
+  if (!result || result.status !== 'active') {
+    setProfile(null)
+    await supabase.auth.signOut()
+    return
+  }
+
+  setProfile(result)
+}
       } catch (error) {
         console.error('Unable to load user profile:', error)
 
@@ -157,18 +163,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [userId, fetchProfile])
 
-  const refreshProfile = useCallback(async () => {
-    if (!userId) return null
+ const refreshProfile = useCallback(async () => {
+  if (!userId) return null
 
-    try {
-      const result = await fetchProfile(userId)
-      setProfile(result)
-      return result
-    } catch (error) {
-      console.error('Unable to refresh user profile:', error)
+  try {
+    const result = await fetchProfile(userId)
+
+    if (!result || result.status !== 'active') {
+      setProfile(null)
+      await supabase.auth.signOut()
       return null
     }
-  }, [userId, fetchProfile])
+
+    setProfile(result)
+    return result
+  } catch (error) {
+    console.error('Unable to refresh user profile:', error)
+    return null
+  }
+}, [userId, fetchProfile])
 
   const signOut = useCallback(async (reason?: 'expired') => {
     if (reason === 'expired') {

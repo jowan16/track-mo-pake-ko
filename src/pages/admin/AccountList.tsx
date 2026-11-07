@@ -39,9 +39,14 @@ export function AccountList({ role, search = '', showEmail }: { role: 'user' | '
         await logAudit(me, `Sent password reset to ${name}`)
         return 'Reset link sent.'
       }
-      const status = p.kind === 'suspend' ? 'suspended' : 'active'
-      const { error: e } = await supabase.from('profiles').update({ status }).eq('id', p.target.id)
-      if (e) throw e
+   const status = p.kind === 'suspend' ? 'suspended' : 'active'
+
+const { error: e } = await supabase.rpc('admin_set_account_status', {
+  p_target_user_id: p.target.id,
+  p_status: status,
+})
+
+if (e) throw e
       await logAudit(me, `${p.kind === 'suspend' ? 'Suspended' : 'Reactivated'} ${p.target.role} ${name}`)
       return p.kind === 'suspend' ? 'Account suspended.' : 'Account reactivated.'
     },

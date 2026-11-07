@@ -16,7 +16,7 @@ type Profile = {
   email: string | null;
   role: string;
   created_at: string;
-  is_active: boolean;
+  status: "active" | "suspended";
 };
 
 export default function AdminDashboard() {
@@ -31,7 +31,7 @@ export default function AdminDashboard() {
     try {
       const { data, error: profilesError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, role, created_at, is_active")
+        .select("id, full_name, email, role, created_at, status")
         .order("created_at", { ascending: false });
 
       if (profilesError) throw profilesError;
@@ -59,8 +59,13 @@ export default function AdminDashboard() {
   const regularUsers = users.filter((user) => user.role === "user");
   const administratorUsers = users.filter((user) => user.role === "admin");
 
-  const activeUsers = regularUsers.filter((user) => user.is_active);
-  const inactiveUsers = regularUsers.filter((user) => !user.is_active);
+  const activeUsers = regularUsers.filter(
+    (user) => user.status === "active"
+  );
+
+  const suspendedUsers = regularUsers.filter(
+    (user) => user.status === "suspended"
+  );
 
   const recentAccounts = users.slice(0, 5);
 
@@ -90,8 +95,8 @@ export default function AdminDashboard() {
       iconStyle: "bg-emerald-50 text-emerald-600",
     },
     {
-      title: "Inactive Users",
-      count: inactiveUsers.length,
+      title: "Suspended Users",
+      count: suspendedUsers.length,
       description: "User accounts with restricted access",
       icon: UserX,
       iconStyle: "bg-red-50 text-red-600",
@@ -284,12 +289,14 @@ export default function AdminDashboard() {
                     <td className="px-5 py-4">
                       <span
                         className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                          user.is_active
+                          user.status === "active"
                             ? "bg-emerald-50 text-emerald-700"
                             : "bg-red-50 text-red-700"
                         }`}
                       >
-                        {user.is_active ? "Active" : "Inactive"}
+                        {user.status === "active"
+                          ? "Active"
+                          : "Suspended"}
                       </span>
                     </td>
                   </tr>

@@ -16,6 +16,7 @@ type Profile = {
   email: string | null;
   role: string;
   created_at: string;
+  status: "active" | "suspended";
   is_active: boolean;
 };
 
@@ -56,13 +57,19 @@ export default function UserAccounts() {
       const { data, error: profilesError } = await supabase
         .from("profiles")
         .select(
-          "id, full_name, email, role, created_at, is_active"
+          "id, full_name, email, role, created_at, status"
         )
         .order("created_at", { ascending: false });
 
       if (profilesError) throw profilesError;
 
-      setUsers((data ?? []) as Profile[]);
+      const mappedUsers: Profile[] = (data ?? []).map((profile) => ({
+        ...profile,
+        status: profile.status as "active" | "suspended",
+        is_active: profile.status === "active",
+      }));
+
+      setUsers(mappedUsers);
     } catch (err) {
       console.error("User accounts error:", err);
 
@@ -115,7 +122,7 @@ export default function UserAccounts() {
     });
   }, [users, searchTerm, activeTab]);
 
-  // Activate or deactivate a regular user account.
+  // Activate or suspend a regular user account.
   async function toggleAccountStatus(account: Profile) {
     if (account.role !== "user") {
       setError(
@@ -133,7 +140,7 @@ export default function UserAccounts() {
 
     const confirmed = window.confirm(
       `Are you sure you want to ${
-        nextStatus ? "activate" : "deactivate"
+        nextStatus ? "activate" : "suspend"
       } ${
         account.full_name || account.email || "this account"
       }?`
@@ -147,7 +154,6 @@ export default function UserAccounts() {
 
     try {
       // Secure Supabase RPC function.
-      // Parameter names must match the SQL function signature.
       const { error: rpcError } = await supabase.rpc(
         "admin_set_account_active",
         {
@@ -158,11 +164,17 @@ export default function UserAccounts() {
 
       if (rpcError) throw rpcError;
 
+      const newStatus = nextStatus ? "active" : "suspended";
+
       // Update the account status in the interface.
       setUsers((previousUsers) =>
         previousUsers.map((user) =>
           user.id === account.id
-            ? { ...user, is_active: nextStatus }
+            ? {
+                ...user,
+                status: newStatus,
+                is_active: nextStatus,
+              }
             : user
         )
       );
@@ -171,7 +183,7 @@ export default function UserAccounts() {
         `${
           account.full_name || account.email || "Account"
         } has been ${
-          nextStatus ? "activated" : "deactivated"
+          nextStatus ? "activated" : "suspended"
         } successfully.`
       );
     } catch (err) {
@@ -465,7 +477,7 @@ export default function UserAccounts() {
                                 : "bg-red-50 text-red-700"
                             }`}
                           >
-                            {user.is_active ? "Active" : "Inactive"}
+                            {user.is_active ? "Active" : "Suspended"}
                           </span>
                         </td>
 
@@ -483,7 +495,7 @@ export default function UserAccounts() {
                                 user.id === currentUserId
                                   ? "You cannot change your own account status."
                                   : user.is_active
-                                    ? "Deactivate account"
+                                    ? "Suspend account"
                                     : "Activate account"
                               }
                               className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -506,7 +518,7 @@ export default function UserAccounts() {
                               {updatingId === user.id
                                 ? "Updating..."
                                 : user.is_active
-                                  ? "Deactivate"
+                                  ? "Suspend"
                                   : "Activate"}
                             </button>
                           </td>

@@ -186,7 +186,7 @@ export default function Auth({
         const { data: profile, error: profileError } =
           await supabase
             .from("profiles")
-            .select("role, is_active")
+            .select("role, status")
             .eq("id", data.user.id)
             .maybeSingle();
 
@@ -199,11 +199,11 @@ export default function Auth({
         }
 
         // Reject inactive accounts.
-        if (profile.is_active !== true) {
+      if (profile.status !== "active") {
           await supabase.auth.signOut();
 
           throw new Error(
-            "Your account has been deactivated. Please contact the administrator for assistance."
+           "Your account has been suspended. Please contact the administrator for assistance."
           );
         }
 
